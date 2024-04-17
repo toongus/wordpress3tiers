@@ -1,0 +1,820 @@
+{
+	"AWSTemplateFormatVersion": "2010-09-09",
+	"Description": "AWS CloudFormation for My Wordpress VPC 3 tiers by Teerayuth K.",
+	"Resources": {
+		"myWpVpc": {
+			"Type": "AWS::EC2::VPC",
+			"Properties": {
+				"CidrBlock": "10.0.0.0/16",
+				"EnableDnsHostnames": true,
+				"EnableDnsSupport": true,
+				"InstanceTenancy": "default",
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-vpc"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpIgw": {
+			"Type": "AWS::EC2::InternetGateway",
+			"Properties": {
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-igw"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpAttachGateway": {
+			"Type": "AWS::EC2::VPCGatewayAttachment",
+			"Properties": {
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"InternetGatewayId": {
+					"Ref": "myWpIgw"
+				}
+			}
+		},
+		"myWpPublicSubnet1a": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"AvailabilityZone": {
+					"Fn::Select": [
+						0,
+						{
+							"Fn::GetAZs": ""
+						}
+					]
+				},
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"CidrBlock": "10.0.0.0/24",
+				"MapPublicIpOnLaunch": true,
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-public-subnet1a"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpPublicSubnet1b": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"AvailabilityZone": {
+					"Fn::Select": [
+						1,
+						{
+							"Fn::GetAZs": ""
+						}
+					]
+				},
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"CidrBlock": "10.0.1.0/24",
+				"MapPublicIpOnLaunch": true,
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-public-subnet1b"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpPublicRtb": {
+			"Type": "AWS::EC2::RouteTable",
+			"Properties": {
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-public-rtb"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpPublicRtbAssoc1a": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties": {
+				"SubnetId": {
+					"Ref": "myWpPublicSubnet1a"
+				},
+				"RouteTableId": {
+					"Ref": "myWpPublicRtb"
+				}
+			}
+		},
+		"myWpPublicRtbAssoc1b": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties": {
+				"SubnetId": {
+					"Ref": "myWpPublicSubnet1b"
+				},
+				"RouteTableId": {
+					"Ref": "myWpPublicRtb"
+				}
+			}
+		},
+		"myWpPublicRoute": {
+			"Type": "AWS::EC2::Route",
+			"Properties": {
+				"RouteTableId": {
+					"Ref": "myWpPublicRtb"
+				},
+				"DestinationCidrBlock": "0.0.0.0/0",
+				"GatewayId": {
+					"Ref": "myWpIgw"
+				}
+			}
+		},
+		"myWpPrivateSubnet1aAppTier": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"AvailabilityZone": {
+					"Fn::Select": [
+						0,
+						{
+							"Fn::GetAZs": ""
+						}
+					]
+				},
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"CidrBlock": "10.0.2.0/24",
+				"MapPublicIpOnLaunch": false,
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-private-subnet1a-apptier"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpPrivateSubnet1bAppTier": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"AvailabilityZone": {
+					"Fn::Select": [
+						1,
+						{
+							"Fn::GetAZs": ""
+						}
+					]
+				},
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"CidrBlock": "10.0.3.0/24",
+				"MapPublicIpOnLaunch": false,
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-private-subnet1b-apptier"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpPrivateSubnet1aDbTier": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"AvailabilityZone": {
+					"Fn::Select": [
+						0,
+						{
+							"Fn::GetAZs": ""
+						}
+					]
+				},
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"CidrBlock": "10.0.4.0/24",
+				"MapPublicIpOnLaunch": false,
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-private-subnet1a-dbtier"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpPrivateSubnet1bDbTier": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"AvailabilityZone": {
+					"Fn::Select": [
+						1,
+						{
+							"Fn::GetAZs": ""
+						}
+					]
+				},
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"CidrBlock": "10.0.5.0/24",
+				"MapPublicIpOnLaunch": false,
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-private-subnet1b-dbtier"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpPrivateRtb1a": {
+			"Type": "AWS::EC2::RouteTable",
+			"Properties": {
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-private-1a-rtb"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpPrivateRtbAssoc1aApp": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties": {
+				"SubnetId": {
+					"Ref": "myWpPrivateSubnet1aAppTier"
+				},
+				"RouteTableId": {
+					"Ref": "myWpPrivateRtb1a"
+				}
+			}
+		},
+		"myWpPrivateRtbAssoc1aDb": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties": {
+				"SubnetId": {
+					"Ref": "myWpPrivateSubnet1aDbTier"
+				},
+				"RouteTableId": {
+					"Ref": "myWpPrivateRtb1a"
+				}
+			}
+		},
+		"myWpPrivateRtb1b": {
+			"Type": "AWS::EC2::RouteTable",
+			"Properties": {
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-private-1b-rtb"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpPrivateRtbAssoc1bApp": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties": {
+				"SubnetId": {
+					"Ref": "myWpPrivateSubnet1bAppTier"
+				},
+				"RouteTableId": {
+					"Ref": "myWpPrivateRtb1b"
+				}
+			}
+		},
+		"myWpPrivateRtbAssoc1bDb": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties": {
+				"SubnetId": {
+					"Ref": "myWpPrivateSubnet1bDbTier"
+				},
+				"RouteTableId": {
+					"Ref": "myWpPrivateRtb1b"
+				}
+			}
+		},
+		"myWp1aNatGatgway": {
+			"Type": "AWS::EC2::NatGateway",
+			"Properties": {
+				"AllocationId": {
+					"Fn::GetAtt": [
+						"myWpEip1a",
+						"AllocationId"
+					]
+				},
+				"SubnetId": {
+					"Ref": "myWpPublicSubnet1a"
+				},
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-public-1a-natgw"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpEip1a": {
+			"Type": "AWS::EC2::EIP",
+			"Properties": {
+				"Domain": "vpc"
+			}
+		},
+		"myWp1aRouteNATGateway": {
+			"Type": "AWS::EC2::Route",
+			"Properties": {
+				"RouteTableId": {
+					"Ref": "myWpPrivateRtb1a"
+				},
+				"DestinationCidrBlock": "0.0.0.0/0",
+				"NatGatewayId": {
+					"Ref": "myWp1aNatGatgway"
+				}
+			}
+		},
+		"myWp1bNatGatgway": {
+			"Type": "AWS::EC2::NatGateway",
+			"Properties": {
+				"AllocationId": {
+					"Fn::GetAtt": [
+						"myWpEip1b",
+						"AllocationId"
+					]
+				},
+				"SubnetId": {
+					"Ref": "myWpPublicSubnet1b"
+				},
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-public-1b-natgw"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpEip1b": {
+			"Type": "AWS::EC2::EIP",
+			"Properties": {
+				"Domain": "vpc"
+			}
+		},
+		"myWp1bRouteNATGateway": {
+			"Type": "AWS::EC2::Route",
+			"Properties": {
+				"RouteTableId": {
+					"Ref": "myWpPrivateRtb1b"
+				},
+				"DestinationCidrBlock": "0.0.0.0/0",
+				"NatGatewayId": {
+					"Ref": "myWp1bNatGatgway"
+				}
+			}
+		},
+		"mySshSg": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Allow SSH to somewhare",
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"SecurityGroupIngress": [
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 22,
+						"ToPort": 22,
+						"CidrIp": "0.0.0.0/0"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-ssh-sg"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpAlbSg": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Allow http/https to ALB",
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"SecurityGroupIngress": [
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 80,
+						"ToPort": 80,
+						"CidrIp": "0.0.0.0/0"
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 443,
+						"ToPort": 443,
+						"CidrIp": "0.0.0.0/0"
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 22,
+						"ToPort": 22,
+						"CidrIp": "0.0.0.0/0"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-alb-sg"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpAppSg": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Allow ALB to App",
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"SecurityGroupIngress": [
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 80,
+						"ToPort": 80,
+						"SourceSecurityGroupId": {
+							"Fn::GetAtt": [
+								"myWpAlbSg",
+								"GroupId"
+							]
+						}
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 443,
+						"ToPort": 443,
+						"SourceSecurityGroupId": {
+							"Fn::GetAtt": [
+								"myWpAlbSg",
+								"GroupId"
+							]
+						}
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 22,
+						"ToPort": 22,
+						"SourceSecurityGroupId": {
+							"Fn::GetAtt": [
+								"mySshSg",
+								"GroupId"
+							]
+						}
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-app-sg"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpDbSg": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Allow App to DB",
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"SecurityGroupIngress": [
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 3306,
+						"ToPort": 3306,
+						"SourceSecurityGroupId": {
+							"Fn::GetAtt": [
+								"myWpAppSg",
+								"GroupId"
+							]
+						}
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 22,
+						"ToPort": 22,
+						"SourceSecurityGroupId": {
+							"Fn::GetAtt": [
+								"mySshSg",
+								"GroupId"
+							]
+						}
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-db-sg"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpEfsSg": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Allow App to EFS",
+				"VpcId": {
+					"Ref": "myWpVpc"
+				},
+				"SecurityGroupIngress": [
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 2049,
+						"ToPort": 2049,
+						"SourceSecurityGroupId": {
+							"Fn::GetAtt": [
+								"myWpAppSg",
+								"GroupId"
+							]
+						}
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 22,
+						"ToPort": 22,
+						"SourceSecurityGroupId": {
+							"Fn::GetAtt": [
+								"mySshSg",
+								"GroupId"
+							]
+						}
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join": [
+								"",
+								[
+									{
+										"Ref": "AWS::StackName"
+									},
+									"-efs-sg"
+								]
+							]
+						}
+					}
+				]
+			}
+		},
+		"myWpEfsSgIngressItself": {
+			"Type": "AWS::EC2::SecurityGroupIngress",
+			"Properties": {
+				"GroupId": {
+					"Ref": "myWpEfsSg"
+				},
+				"IpProtocol": "tcp",
+				"ToPort": 2049,
+				"FromPort": 2049,
+				"SourceSecurityGroupId": {
+					"Ref": "myWpEfsSg"
+				}
+			},
+			"DependsOn": "myWpEfsSg"
+		}
+	},
+	"Outputs": {
+		"myWpDbSubnets": {
+			"Description": "Private subnet IDs as comma-delimited for DB",
+			"Value": {
+				"Fn::Join": [
+					",",
+					[
+						{
+							"Ref": "myWpPrivateSubnet1aDbTier"
+						},
+						{
+							"Ref": "myWpPrivateSubnet1bDbTier"
+						}
+					]
+				]
+			}
+		},
+		"myWpDbSgs": {
+			"Description": "Security groups as comma-delimited for DB",
+			"Value": {
+				"Fn::Join": [
+					",",
+					[
+						{
+							"Ref": "myWpDbSg"
+						}
+					]
+				]
+			}
+		},
+		"wordpressSubnetDbTier1a": {
+			"Description": "Private subnet IDs as comma-delimited for EFS 1a",
+			"Value": {
+				"Ref": "myWpPrivateSubnet1aDbTier"
+			}
+		},
+		"wordpressSubnetDbTier1b": {
+			"Description": "Private subnet IDs as comma-delimited for EFS 1b",
+			"Value": {
+				"Ref": "myWpPrivateSubnet1bDbTier"
+			}
+		},
+		"wordpressEfsSgs": {
+			"Description": "Security groups as comma-delimited for EFS",
+			"Value": {
+				"Fn::Join": [
+					",",
+					[
+						{
+							"Ref": "myWpEfsSg"
+						}
+					]
+				]
+			}
+		}
+	}
+}
