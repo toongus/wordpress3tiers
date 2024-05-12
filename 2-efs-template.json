@@ -1,0 +1,70 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Metadata": {
+        "Authors": {
+            "Description": "Teerayuth K."
+        },
+        "AWS::CloudFormation::Interface": {
+            "ParameterGroups" : [
+                {
+                    "Label": {"default" : "Network & Security configure for EFS"},
+                    "Parameters": ["wordpressSubnetDbTier1a", "wordpressSubnetDbTier1b", "wordpressEfsSgs"]
+                }
+            ]
+        }
+    },    
+    "Parameters": {
+        "wordpressSubnetDbTier1a": {
+            "Description": "Select db-tier subnet for 1a",
+            "Type": "AWS::EC2::Subnet::Id"
+        },
+        "wordpressSubnetDbTier1b": {
+            "Description": "Select db-tier subnet for 1b",
+            "Type": "AWS::EC2::Subnet::Id"
+        },
+        "wordpressEfsSgs": {
+            "Description": "Select security group",
+            "Type": "List<AWS::EC2::SecurityGroup::Id>"
+        }
+    },
+    "Resources": {
+        "myFileSystem": {
+            "Type": "AWS::EFS::FileSystem",
+            "Properties": {
+                "PerformanceMode": "generalPurpose",
+                "FileSystemTags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    {
+                                        "Ref": "AWS::StackName"
+                                    },
+                                    "-efs"
+                                ]
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "myMountTarget1a": {
+            "Type": "AWS::EFS::MountTarget",
+            "Properties": {
+                "FileSystemId": { "Ref": "myFileSystem" },
+                "SubnetId": { "Ref": "wordpressSubnetDbTier1a" },
+                "SecurityGroups": { "Ref": "wordpressEfsSgs" }
+            }
+        },
+        "myMountTarget1b": {
+            "Type": "AWS::EFS::MountTarget",
+            "Properties": {
+                "FileSystemId": { "Ref": "myFileSystem" },
+                "SubnetId": { "Ref": "wordpressSubnetDbTier1b" },
+                "SecurityGroups": { "Ref": "wordpressEfsSgs" }
+            }
+        }
+    }
+}
