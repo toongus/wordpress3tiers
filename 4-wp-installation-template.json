@@ -1,0 +1,252 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Web server for Wordpress website by iLoveJson",
+    "Metadata": {
+        "Authors": {
+            "Description": "Teerayuth K."
+        },
+        "AWS::CloudFormation::Interface": {
+            "ParameterGroups" : [
+                {
+                    "Label": {"default" : "Network configuration"},
+                    "Parameters": ["myWpAppSubnetId1a", "myWpAppSg"]
+                },
+                {
+                    "Label": {"default":"Application configuration"},
+                    "Parameters": ["myWpEfsSystem", "myWpDbEndpoint"]
+                }
+            ],
+            "ParameterLabels": {
+                "myWpAppSubnetId1a": {"default" : "The private subnet for install wordpress initial versions"},
+                "myWpAppSg": {"default" : "The security group that will be attached to the app instance"},
+                "myWpEfsSystem": {"default": "EFS file ID ex. \"fs-aed8ad5b\" "},
+                "myWpDbEndpoint": {"default": "Database(RDS) endpoint"}
+            }
+        }
+    },
+    "Parameters": {
+		"myWpAppSubnetId1a": {
+			"Type": "AWS::EC2::Subnet::Id"
+		},
+		"myWpAppSg": {
+			"Type": "AWS::EC2::SecurityGroup::Id"
+		},
+		"myWpEfsSystem": {
+			"Type": "String"
+		},
+		"myWpDbEndpoint": {
+			"Type": "String"
+		}
+    },
+    "Resources": {
+		"myWpInstanceProfile": {
+			"Type": "AWS::IAM::InstanceProfile",
+			"Properties": {
+				"Path": "/",
+				"Roles": [
+					"SSM-EC2-InstanceProfile"
+				]
+			}
+		},        
+        "myWpWebserverInstance": {
+            "Type": "AWS::EC2::Instance",
+            "Metadata": {
+                "AWS::CloudFormation::Init" : {
+                    "configSets" : {
+                        "00_setup" : [ "00_mount_efs","01_httpd", "02_install_php", "04_set_permission", "05_download_wordpress"],
+                        "01_wordpress_config": ["06_config_phpini"]
+                    },
+                    "00_mount_efs": {
+                        "files": {
+                            "/tmp/cfn/00_mount_efs.sh": {
+                                "content": {
+                                    "Fn::Join": ["", [
+                                            "#!/bin/bash\n",
+                                            "sudo su\n",
+                                            "mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport ", { "Ref" : "myWpEfsSystem" },".efs.",{"Ref" : "AWS::Region"},".amazonaws.com:/ /var/www/html\n"
+                                        ]
+                                    ]
+                                },
+                                "mode": "000755",
+                                "owner": "root",
+                                "group": "root"
+                            }
+                        },
+                        "commands" : {
+                            "run_mount_efs" : {
+                                "command" : "./00_mount_efs.sh > 00_mount_efs.log",
+                                "cwd" : "/tmp/cfn"
+                            }
+                        }
+                    },
+                    "01_httpd" : {
+                        "files": {
+                            "/tmp/cfn/01_httpd.sh":{
+                                "content": {
+                                    "Fn::Join": ["", [
+                                            "#!/bin/bash\n",
+                                            "sudo su\n",
+                                            "dnf install -y httpd httpd-tools mod_ssl\n",
+                                            "systemctl enable httpd\n",
+                                            "systemctl start httpd\n"
+                                        ]
+                                    ]
+                                },
+                                "mode": "000755",
+                                "owner": "root",
+                                "group": "root"
+                            }
+                        },
+                        "commands" : {
+                            "run_httpd" : {
+                                "command" : "./01_httpd.sh > 01_httpd.log",
+                                "cwd" : "/tmp/cfn"
+                            }
+                        }
+                    },
+                    "02_install_php": {
+                        "files":{
+                            "/tmp/cfn/02_install_php.sh":{
+                                "content": {
+                                    "Fn::Join": ["", [
+                                            "#!/bin/bash\n",
+                                            "sudo su\n",
+                                            "dnf install -y wget php-fpm php-mysqli php-json php php-devel\n",
+                                            "dnf clean metadata\n",
+                                            "dnf install php php-common php-pear -y\n",
+                                            "dnf install php-{cgi,curl,mbstring,gd,mysqlnd,gettext,json,xml,fpm,intl,zip} -y\n"
+                                        ]
+                                    ]
+                                },
+                                "mode": "000755",
+                                "owner": "root",
+                                "group": "root"
+                            }
+                        },
+                        "commands" : {
+                            "run_install_php" : {
+                                "command" : "./02_install_php.sh > 02_install_php.log",
+                                "cwd" : "/tmp/cfn"
+                            }
+                        }
+                    },
+                    "04_set_permission": {
+                        "files":{
+                            "/tmp/cfn/04_set_permission.sh": {
+                                "content": {
+                                    "Fn::Join": ["", [
+                                            "#!/bin/bash\n",
+                                            "sudo su\n",
+                                            "usermod -a -G apache ec2-user\n",
+                                            "chown -R ec2-user:apache /var/www\n",
+                                            "chmod 2775 /var/www && find /var/www -type d -exec sudo chmod 2775 {} \\;\n",
+                                            "find /var/www -type f -exec sudo chmod 0664 {} \\;\n",
+                                            "chown apache:apache -R /var/www/html\n"
+                                        ]
+                                    ]
+                                },
+                                "mode": "000755",
+                                "owner": "root",
+                                "group": "root"
+                            }
+                        },
+                        "commands": {
+                            "run_set_permission": {
+                                "command" : "./04_set_permission.sh > 04_set_permission.log",
+                                "cwd": "/tmp/cfn"
+                            }
+                        }
+                    },
+                    "05_download_wordpress": {
+                        "files":{
+                            "/tmp/cfn/05_download_wordpress.sh": {
+                                "content": {
+                                    "Fn::Join": ["", [
+                                            "#!/bin/bash\n",
+                                            "sudo su\n",
+                                            "wget https://wordpress.org/latest.tar.gz\n",
+                                            "tar -xzf latest.tar.gz\n",
+                                            "cp -r wordpress/* /var/www/html/\n",
+                                            "cp /var/www/html/wp-config-sample.php /var/www/html/wp-config.php\n"
+                                        ]
+                                    ]
+                                },
+                                "mode": "000755",
+                                "owner": "root",
+                                "group": "root"
+                            }
+                        },
+                        "commands": {
+                            "run_05_download_wordpress": {
+                                "command": "./05_download_wordpress.sh > 05_download_wordpress.log",
+                                "cwd": "/tmp/cfn"
+                            }
+                        }
+                    },
+                    "06_config_phpini": {
+                        "files": {
+                            "/tmp/cfn/06_config_phpini.sh": {
+                                "content": {
+                                    "Fn::Join":["", [
+                                            "#!/bin/bash\n",
+                                            "sudo su\n",
+                                            "sed -i \"s/database_name_here/db_mywp/\" /var/www/html/wp-config.php\n",
+                                            "sed -i \"s/username_here/root/\" /var/www/html/wp-config.php\n",
+                                            "sed -i \"s/password_here/password1234/\" /var/www/html/wp-config.php\n",
+                                            "sed -i \"s/localhost/", { "Ref" : "myWpDbEndpoint" },"/\" /var/www/html/wp-config.php\n"
+                                        ]
+                                    ]
+                                },
+                                "mode": "000755",
+                                "owner": "root",
+                                "group": "root"
+                            }
+                        },
+                        "commands": {
+                            "run_06_config_phpini": {
+                                "command": "./06_config_phpini.sh > 06_config_phpini.log",
+                                "cwd": "/tmp/cfn"
+                            }
+                        }
+                    }
+                }
+            },
+            "Properties": {
+                "InstanceType": "t2.micro",
+                "ImageId": "ami-051f8a213df8bc089",
+                "SubnetId": {"Ref": "myWpAppSubnetId1a"},
+                "SecurityGroupIds": [{"Ref": "myWpAppSg"}],
+				"IamInstanceProfile": {
+					"Ref": "myWpInstanceProfile"
+				},
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "#!/bin/bash\n",
+                                "sudo su\n",                                
+                                "mkdir -p /var/www/html\n",                                
+                                "dnf install -q -y wget tmux unzip tar curl-minimal sed\n",
+                                "export CFN_INIT=\"/opt/aws/bin/cfn-init\"\n",
+                                "export CFN_SIGNAL=\"/opt/aws/bin/cfn-signal\"\n",
+                                "#----------------------------------------------\n",
+                                "$CFN_INIT -v --stack ",{"Ref": "AWS::StackName"}," --resource myWpWebserverInstance --region ",{"Ref": "AWS::Region"}," -c 00_setup\n",
+                                "$CFN_INIT -v --stack ",{"Ref": "AWS::StackName"}," --resource myWpWebserverInstance --region ",{"Ref": "AWS::Region"}," -c 01_wordpress_config\n",
+                                "$CFN_SIGNAL -e $? --stack ",{"Ref":"AWS::StackName"}," --resource myWpWebserverInstance --region ",{"Ref": "AWS::Region"},"\n",
+                                "dnf clean all\n",
+                                "service httpd restart\n"
+                            ]
+                        ]
+                    }
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {"Ref": "AWS::StackName"}
+                    }
+                ]
+            }
+        }
+    }
+}
