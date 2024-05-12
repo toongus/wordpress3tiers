@@ -1,0 +1,278 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "AWS CloudFormation for My Wordpress--RDS (update MySql version from 5.7.44 to 8.0.36).",
+    "Metadata": {
+        "Authors": {
+            "Description": "Teerayuth K."
+        },
+        "AWS::CloudFormation::Interface": {
+            "ParameterGroups" : [
+                {
+                    "Label": {"default" : "Network Configuration"},
+                    "Parameters": ["myWordpressDbSubnets", "myWordpressDbSgs"]
+                },
+                {
+                    "Label": {"default":"KMS key configuration (optional)"},
+                    "Parameters": ["existingEncryptionKeyId", "dbEncryptionKeyType"]
+                }                
+            ]
+        }
+    },
+    "Parameters":{
+        "myWordpressDbSubnets":
+        {
+            "Description": "Select subnets",
+            "Type": "List<AWS::EC2::Subnet::Id>"
+        },
+        "myWordpressDbSgs":
+        {
+            "Description": "Select database security group",
+            "Type": "List<AWS::EC2::SecurityGroup::Id>"
+        },
+        "existingEncryptionKeyId": {
+            "Description": "Provide encryption key id",
+            "Type": "String",
+            "Default": ""
+        },
+        "dbEncryptionKeyType": {
+            "Description": "Please choose key type for DB encryption",
+            "Type": "String",
+            "Default": "Default-Key",
+            "AllowedValues": [
+                "Unencrypted",
+                "Default-Key",
+                "Create-New-Key",
+                "User-Provided-Key"
+            ]
+        }
+    },
+    "Conditions": {
+        "IsUnencrypted": {
+            "Fn::Equals": [
+                {
+                    "Ref": "dbEncryptionKeyType"
+                },
+                "Unencrypted"
+            ]
+        },
+        "IsDefaultKey": {
+            "Fn::Equals": [
+                {
+                    "Ref": "dbEncryptionKeyType"
+                },
+                "Default-Key"
+            ]
+        },
+        "IsUserProvidedKey": {
+            "Fn::Not": [
+                {
+                    "Fn::Equals": [
+                        {
+                            "Ref": "existingEncryptionKeyId"
+                        },
+                        ""
+                    ]
+                }
+            ]
+        },
+        "IsCreateNewKey": {
+            "Fn::And": [
+                {
+                    "Fn::Not": [
+                        {
+                            "Fn::Or": [
+                                {"Condition": "IsUnencrypted"},
+                                {"Condition": "IsDefaultKey"}
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "Fn::Equals": [
+                        {
+                            "Ref": "existingEncryptionKeyId"
+                        },
+                        ""
+                    ]
+                }
+            ]
+        }
+    },
+    "Resources":{
+        "myRdsKmsKey": {
+            "Type":"AWS::KMS::Key",
+            "Condition": "IsCreateNewKey",
+            "Properties": {
+                "Description": "An example symmetric encryption KMS key",
+                "KeyPolicy": {
+                    "Version": "2012-10-17",
+                    "Id": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "key-",
+                                {
+                                    "Ref" : "AWS::StackName"
+                                }
+                            ]
+                        ]
+                    },
+                    "Statement": [
+                        {
+                            "Sid": "Enable IAM User Permissions",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::Join": [
+                                        "", 
+                                        [
+                                            "arn:aws:iam::",
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            },
+                                            ":root"
+                                        ]
+                                    ]
+                                }
+                            },
+                            "Action": "kms:*",
+                            "Resource": "*"
+                        }
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    {
+                                        "Ref": "AWS::StackName"
+                                    },
+                                    "-kms-key"
+                                ]
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "myWordpressRdsDBSubnetGroup": {
+           "Type": "AWS::RDS::DBSubnetGroup",
+           "Properties": {
+                "DBSubnetGroupDescription": "Subnets the database belongs to Wordpress",
+                "SubnetIds": { "Ref": "myWordpressDbSubnets" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    {
+                                        "Ref": "AWS::StackName"
+                                    },
+                                    "-db-subnet-group"
+                                ]
+                            ]
+                        }
+                    }
+                ]
+           }
+        },
+        "myDbMasterInstance": {
+            "Type": "AWS::RDS::DBInstance",
+            "DeletionPolicy": "Snapshot",
+            "Properties": {
+                "DBInstanceIdentifier": {"Fn::Sub": "${AWS::StackName}-rds-master-instance"},
+                "DBSubnetGroupName": {"Ref": "myWordpressRdsDBSubnetGroup"},
+                "VPCSecurityGroups": {"Ref": "myWordpressDbSgs"},
+                "AllocatedStorage": 20,
+                "MultiAZ": false,
+                "DBInstanceClass": "db.t3.micro",
+                "CopyTagsToSnapshot": true,
+                "Engine": "MYSQL",
+                "EngineVersion": "8.0.36",
+                "DBName": "db_mywp",
+                "MasterUsername": "root",
+                "MasterUserPassword": "password1234",
+                "Port": 3306, 
+                "KmsKeyId": {
+                    "Fn::If":[
+                        "IsCreateNewKey",
+                        {"Ref":"myRdsKmsKey"},
+                        {
+                            "Fn::If":[
+                                "IsUserProvidedKey",
+                                {
+                                    "Ref": "existingEncryptionKeyId"
+                                },
+                                {
+                                    "Ref": "AWS::NoValue"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "StorageEncrypted": {
+                    "Fn::If": [
+                        "IsUnencrypted",
+                        "false",
+                        "true"
+                    ]
+                },        
+                "PubliclyAccessible": false,
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    {
+                                        "Ref": "AWS::StackName"
+                                    },
+                                    "-db-master"
+                                ]
+                            ]
+                        }
+                    }       
+                ]
+            }
+        },
+        "myDbReplicaInstance": {
+            "Type": "AWS::RDS::DBInstance",
+            "Properties": {
+                "DBInstanceIdentifier": {"Fn::Sub": "${AWS::StackName}-rds-replica-instance"},
+                "CopyTagsToSnapshot": true,
+                "SourceDBInstanceIdentifier": {"Ref": "myDbMasterInstance"},
+                "DBInstanceClass": "db.t3.micro",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    {
+                                        "Ref": "AWS::StackName"
+                                    },
+                                    "-db-replica"
+                                ]
+                            ]
+                        }
+                    }       
+                ]
+            }
+        }
+    },
+    "Outputs": {
+        "dbEndpointAddress": {
+            "Description": "The connection endpoint for the database. For example: mystack-mydb-1apw1j4phylrk.cg034hpkmmjt.us-east-2.rds.amazonaws.com",
+            "Value":{
+                "Fn::GetAtt": "myDbMasterInstance.Endpoint.Address"
+            }
+        }
+    }
+}
