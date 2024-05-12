@@ -1,0 +1,205 @@
+{
+	"AWSTemplateFormatVersion": "2010-09-09",
+	"Description": "Web server for Wordpress website by Teerayuth K.",
+	"Metadata": {
+		"Authors": {
+            "Description": "Teerayuth K."
+        },
+		"AWS::CloudFormation::Interface": {
+			"ParameterGroups" : [
+				{
+                    "Label": {"default" : "Load balancer configuration"},
+                    "Parameters": [ "myWpVpcId", "myWpAlbPublicSubnetId1a", "myWpAlbPublicSubnetId1b", "myWpLoadbalanceSg"]
+				},
+				{
+                    "Label": {"default" : "Auto scaling-group configuration"},
+                    "Parameters": [ "myWpAppSubnetId1a", "myWpAppSubnetId1b", "myWpAppSg", "myWpEfsSystem"]
+				}
+			],
+			"ParameterLabels": {
+				"myWpVpcId" : { "default" : "Which VPC should this be auto scaling" },
+				"myWpAlbPublicSubnetId1a" : { "default" : "The public subnet for load banlancer 1a" },
+				"myWpAlbPublicSubnetId1b" : { "default" : "The public subnet for load banlancer 1b" },
+				"myWpLoadbalanceSg" : { "default" : "The security group that will be attached to the load balancer" },
+				"myWpAppSubnetId1a" : { "default" : "The private subnet for application 1a" },
+				"myWpAppSubnetId1b" : { "default" : "The private subnet for application 1b" },
+				"myWpAppSg" : { "default" : "The security group that will be attached to the app instance when auto scalling" },
+				"myWpEfsSystem" : { "default" : "EFS file system to collect Wordpress's source code '/var/www/html'" }
+			}
+		}
+	},
+	"Parameters": {
+		"myWpVpcId": {
+			"Description": "The VPC for load balancer application",
+			"Type": "AWS::EC2::VPC::Id"
+		},
+		"myWpAlbPublicSubnetId1a": {
+			"Description": "The public subnet for load banlancer 1a",
+			"Type": "AWS::EC2::Subnet::Id"
+		},
+		"myWpAlbPublicSubnetId1b": {
+			"Description": "The public subnet for load banlancer 1b",
+			"Type": "AWS::EC2::Subnet::Id"
+		},
+		"myWpLoadbalanceSg": {
+			"Description": "The security group that will be attached to the ALB",
+			"Type": "AWS::EC2::SecurityGroup::Id"
+		},
+		"myWpAppSubnetId1a": {
+			"Description": "The private subnet for application 1a",
+			"Type": "AWS::EC2::Subnet::Id"
+		},
+		"myWpAppSubnetId1b": {
+			"Description": "The private subnet for application 1b",
+			"Type": "AWS::EC2::Subnet::Id"
+		},
+		"myWpAppSg": {
+			"Description": "The security group that will be attached to the app instance",
+			"Type": "AWS::EC2::SecurityGroup::Id"
+		},
+		"myWpEfsSystem": {
+			"Description": "EFS file ID system \"fs-aed8ad5b\"",
+			"Type": "String"
+		}
+	},
+	"Resources": {
+		"myWpElb": {
+			"Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+			"Properties": {
+				"IpAddressType": "ipv4",
+				"Type": "application",
+				"SecurityGroups": [
+					{
+						"Ref": "myWpLoadbalanceSg"
+					}
+				],
+				"Subnets": [
+					{
+						"Ref": "myWpAlbPublicSubnetId1a"
+					},
+					{
+						"Ref": "myWpAlbPublicSubnetId1b"
+					}
+				]
+			}
+		},
+		"myWpELBtargetGroup": {
+			"Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+			"Properties": {
+				"Port": "80",
+				"Protocol": "HTTP",
+				"TargetType": "instance",
+				"VpcId": {
+					"Ref": "myWpVpcId"
+				},
+                "Matcher": {
+                    "HttpCode": "200,301,302"
+                }
+			}
+		},
+		"myWpElbListner": {
+			"Type": "AWS::ElasticLoadBalancingV2::Listener",
+			"Properties": {
+				"DefaultActions": [
+					{
+						"Type": "forward",
+						"TargetGroupArn": {
+							"Ref": "myWpELBtargetGroup"
+						}
+					}
+				],
+				"LoadBalancerArn": {
+					"Ref": "myWpElb"
+				},
+				"Port": "80",
+				"Protocol": "HTTP"
+			}
+		},
+		"myWpInstanceProfile": {
+			"Type": "AWS::IAM::InstanceProfile",
+			"Properties": {
+				"Path": "/",
+				"Roles": [
+					"SSM-EC2-InstanceProfile"
+				]
+			}
+		},
+		"myWpWebLaunchConfigAsg": {
+			"Type": "AWS::AutoScaling::LaunchConfiguration",
+			"Properties": {
+				"LaunchConfigurationName": "myWpConfiguration",
+				"ImageId": "ami-051f8a213df8bc089",
+				"InstanceType": "t2.micro",
+				"IamInstanceProfile": {
+					"Ref": "myWpInstanceProfile"
+				},
+				"SecurityGroups": [
+					{
+						"Ref": "myWpAppSg"
+					}
+				],
+				"UserData": {
+					"Fn::Base64": {
+						"Fn::Join": [
+							"",
+							[
+								"#!/bin/bash\n",
+								"sudo su\n",
+								"dnf install -y httpd httpd-tools mod_ssl\n",
+								"systemctl enable httpd\n",
+								"systemctl start httpd\n",
+								"dnf clean metadata\n",
+								"dnf install php php-common php-pear -y\n",
+								"dnf install php-{cgi,curl,mbstring,gd,mysqlnd,gettext,json,xml,fpm,intl,zip} -y\n",
+								"echo \"", { "Ref" : "myWpEfsSystem" },".efs.",{"Ref" : "AWS::Region"},".amazonaws.com:/ /var/www/html nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 0 0\" >> /etc/fstab\n",
+								"mount -a\n",
+								"chown apache:apache -R /var/www/html\n",
+								"service httpd restart\n"
+							]
+						]
+					}
+				}
+			}
+		},
+		"myWpAsg": {
+			"Type": "AWS::AutoScaling::AutoScalingGroup",
+			"Properties": {
+				"AutoScalingGroupName": "MyWordpressASG",
+				"LaunchConfigurationName": {
+					"Ref": "myWpWebLaunchConfigAsg"
+				},
+				"DesiredCapacity": 2,
+				"MaxSize": 2,
+				"MinSize": 1,
+				"TargetGroupARNs": [
+					{
+						"Ref": "myWpELBtargetGroup"
+					}
+				],
+				"VPCZoneIdentifier": [
+					{
+						"Ref": "myWpAppSubnetId1a"
+					},
+					{
+						"Ref": "myWpAppSubnetId1b"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": {
+							"Fn::Join":[
+								"",
+								[
+									"WebASG-",
+									{"Ref": "AWS::StackName"}
+								]
+							]
+						},
+						"PropagateAtLaunch": "true"
+					}
+				]
+			}
+		}
+	}
+}
